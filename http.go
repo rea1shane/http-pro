@@ -100,6 +100,7 @@ func readResponseBody(res *http.Response) ([]byte, error) {
 
 func getReqFailureContext(req *http.Request) failure.Context {
 	return failure.Context{
+		"method":      req.Method,
 		"protocol":    req.Proto,
 		"host":        req.URL.Hostname(),
 		"port":        req.URL.Port(),

@@ -15,18 +15,18 @@ func Test(t *testing.T) {
 	payload := strings.NewReader("loginEmail=admin&password=admin")
 	req, err := http.NewRequest(method, url, payload)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Printf("%+v", err)
 		return
 	}
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 	res, err := h.Request(req, context.Background())
 	if err != nil {
-		fmt.Println(err)
+		fmt.Printf("%+v", err)
 		return
 	}
 	body, err := GetStringResponseBody(res)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Printf("%+v", err)
 		return
 	}
 	fmt.Println(body)
