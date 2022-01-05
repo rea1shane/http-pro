@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/morikuni/failure"
-	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -32,44 +31,15 @@ func GetHttp(attempts int, sleepTime time.Duration) Http {
 	}
 }
 
-func (h *Http) request(req *http.Request, ctx context.Context) ([]byte, error) {
+// Request 如果不做 context 控制, 传入 context.Background 即可
+func (h *Http) Request(req *http.Request, ctx context.Context) (*http.Response, error) {
 	req = req.WithContext(ctx)
 	escape(req)
 	res, err := h.attemptDo(req)
 	if err != nil {
 		return nil, err
 	}
-	defer func(Body io.ReadCloser) {
-		_ = Body.Close()
-	}(res.Body)
-	responseBody, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		c := getReqFailureContext(req)
-		c["response_body"] = string(responseBody)
-		return nil, failure.Wrap(err, c)
-	}
-	return responseBody, nil
-}
-
-func (h *Http) RequestWithStringResponse(req *http.Request, ctx context.Context) (string, error) {
-	bytes, err := h.request(req, ctx)
-	if err != nil {
-		return "", err
-	}
-	return string(bytes), nil
-}
-
-func (h *Http) RequestWithStructResponse(req *http.Request, ctx context.Context, responseStruct interface{}) error {
-	bytes, err := h.request(req, ctx)
-	if err != nil {
-		return err
-	}
-	if err = json.Unmarshal(bytes, &responseStruct); err != nil {
-		c := getReqFailureContext(req)
-		c["response_body"] = string(bytes)
-		return failure.Wrap(err, c)
-	}
-	return nil
+	return res, nil
 }
 
 func (h *Http) attemptDo(req *http.Request) (*http.Response, error) {
@@ -96,8 +66,36 @@ func (h *Http) attemptDo(req *http.Request) (*http.Response, error) {
 	return res, nil
 }
 
+func GetStringResponseBody(res *http.Response) (string, error) {
+	bytes, err := readResponseBody(res)
+	if err != nil {
+		return "", err
+	}
+	return string(bytes), nil
+}
+
+func GetStructResponseBody(res *http.Response, responseStruct interface{}) error {
+	bytes, err := readResponseBody(res)
+	if err != nil {
+		return err
+	}
+	if err = json.Unmarshal(bytes, &responseStruct); err != nil {
+		return failure.Wrap(err, getResFailureContext(res, bytes))
+	}
+	return nil
+}
+
 func escape(req *http.Request) {
 	req.URL.RawQuery = url.PathEscape(req.URL.RawQuery)
+}
+
+func readResponseBody(res *http.Response) ([]byte, error) {
+	defer res.Body.Close()
+	responseBody, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return nil, failure.Wrap(err, getResFailureContext(res, responseBody))
+	}
+	return responseBody, nil
 }
 
 func getReqFailureContext(req *http.Request) failure.Context {
@@ -107,4 +105,10 @@ func getReqFailureContext(req *http.Request) failure.Context {
 		"port":        req.URL.Port(),
 		"request_url": req.URL.RequestURI(),
 	}
+}
+
+func getResFailureContext(res *http.Response, body []byte) failure.Context {
+	c := getReqFailureContext(res.Request)
+	c["response_body"] = string(body)
+	return c
 }
